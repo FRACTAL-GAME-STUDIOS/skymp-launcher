@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FRACTAL Launcher</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="brand">
+        <div class="mark">FRACTAL GAME STUDIOS</div>
+        <div class="sub">SkyMP Launcher · <span class="dim">DEV</span></div>
+      </div>
+      <div class="masthead-actions">
+        <span class="pill" id="install-state" hidden></span>
+        <button class="icon-btn" id="btn-settings" title="Instalación y ajustes" hidden>⚙</button>
+      </div>
+    </header>
+
+    <!-- ====================== VISTA PRINCIPAL: SERVIDORES ====================== -->
+    <main id="view-servers" class="view" hidden>
+      <div class="servers-head">
+        <div>
+          <h1>Servidores</h1>
+          <p class="servers-sub">Elige un servidor para entrar al juego.</p>
+        </div>
+        <div class="servers-tools">
+          <button class="ghost" id="btn-refresh">↻ Actualizar estado</button>
+          <button class="primary small" id="btn-add-server">+ Añadir servidor</button>
+        </div>
+      </div>
+
+      <div class="server-grid" id="server-grid"></div>
+
+      <div class="empty-state" id="empty-state" hidden>
+        <div class="empty-emblem">⛺</div>
+        <p>No hay servidores todavía.</p>
+        <button class="primary" id="btn-add-empty">+ Añadir tu primer servidor</button>
+      </div>
+    </main>
+
+    <!-- ====================== VISTA SETUP / ONBOARDING ====================== -->
+    <main id="view-setup" class="view">
+      <div class="setup-shell">
+        <div class="setup-card">
+          <div class="setup-hero">
+            <h1 id="setup-title">Preparemos tu SkyMP</h1>
+            <p id="setup-lead">Comprobando lo que necesitas para jugar…</p>
+          </div>
+
+          <div class="req-list">
+            <!-- Steam -->
+            <div class="req" id="req-steam">
+              <div class="req-icon steam">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.004.105.004.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.727L.436 15.27C1.862 20.307 6.486 24 11.979 24c6.627 0 11.999-5.373 11.999-12S18.605 0 11.979 0zM7.54 18.21l-1.473-.61c.262.543.714.999 1.314 1.25 1.297.539 2.793-.076 3.332-1.375.263-.63.264-1.319.005-1.949s-.75-1.121-1.377-1.383c-.624-.26-1.29-.249-1.878-.03l1.523.63c.956.4 1.409 1.5 1.009 2.455-.397.957-1.497 1.41-2.454 1.012zm11.415-9.303c0-1.662-1.353-3.015-3.015-3.015-1.665 0-3.015 1.353-3.015 3.015 0 1.665 1.35 3.015 3.015 3.015 1.663 0 3.015-1.35 3.015-3.015zm-5.273-.005c0-1.252 1.013-2.266 2.265-2.266 1.249 0 2.266 1.014 2.266 2.266 0 1.251-1.017 2.265-2.266 2.265-1.253 0-2.265-1.014-2.265-2.265z"/></svg>
+              </div>
+              <div class="req-body">
+                <div class="req-title">Steam</div>
+                <div class="req-status" id="steam-status">Buscando…</div>
+              </div>
+              <span class="req-dot checking" id="steam-dot"></span>
+              <button class="ghost small req-action" id="steam-action" hidden>Descargar</button>
+            </div>
+
+            <!-- Skyrim -->
+            <div class="req" id="req-game">
+              <div class="req-icon game">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="m3 20 6-13 4 8 3-5 5 10z"/><path d="m9 7 1.5 3"/></svg>
+              </div>
+              <div class="req-body">
+                <div class="req-title">Skyrim Special Edition</div>
+                <div class="req-status" id="game-status">Buscando…</div>
+              </div>
+              <span class="req-dot checking" id="game-dot"></span>
+              <button class="ghost small req-action" id="game-action" hidden>Ver en Steam</button>
+            </div>
+
+            <!-- SkyMP -->
+            <div class="req" id="req-skymp">
+              <div class="req-icon skymp">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg>
+              </div>
+              <div class="req-body">
+                <div class="req-title">Cliente SkyMP</div>
+                <div class="req-status" id="skymp-status">Sin instalar</div>
+              </div>
+              <span class="req-dot" id="skymp-dot"></span>
+            </div>
+
+            <!-- Interfaz SkyMP (skymp5-front) -->
+            <div class="req" id="req-front" hidden>
+              <div class="req-icon front">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18"/><circle cx="6.5" cy="6.5" r="0.5" fill="currentColor"/></svg>
+              </div>
+              <div class="req-body">
+                <div class="req-title">Interfaz SkyMP (chat / login)</div>
+                <div class="req-status" id="front-status">Sin instalar</div>
+              </div>
+              <span class="req-dot" id="front-dot"></span>
+              <button class="ghost small req-action" id="front-action" hidden>Instalar</button>
+            </div>
+          </div>
+
+          <div class="install-target">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+            <span>Se instalará en <code id="install-path">C:\FractalGameStudios\Skyrim</code></span>
+            <button class="link-btn" id="btn-change-dir">Cambiar carpeta</button>
+            <button class="link-btn" id="btn-open-dir" hidden>Abrir carpeta</button>
+          </div>
+
+          <p class="warn" id="version-warn" hidden></p>
+
+          <button class="primary big" id="btn-install" disabled>Instalar SkyMP</button>
+
+          <div class="progress-wrap" id="progress-wrap" hidden>
+            <div class="progress"><div class="bar" id="bar"></div></div>
+            <div class="progress-label" id="stage-label">—</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ====================== MODAL: AÑADIR SERVIDOR ====================== -->
+    <div class="modal-backdrop" id="modal" hidden>
+      <div class="modal">
+        <div class="modal-head">
+          <h2>Añadir servidor</h2>
+          <button class="icon-btn" id="btn-cancel-server" title="Cerrar">✕</button>
+        </div>
+        <form id="add-form">
+          <div class="grid2">
+            <label>Nombre<input id="f-name" placeholder="FRACTAL - Mi servidor" /></label>
+            <label>ID<input id="f-id" placeholder="mi-servidor" /></label>
+            <label>IP<input id="f-ip" placeholder="127.0.0.1" /></label>
+            <label>Puerto juego (UDP)<input id="f-port" type="number" value="7777" /></label>
+            <label>Puerto estado (TCP)<input id="f-ping-port" type="number" value="3000" /></label>
+            <label class="toggle-label">
+              Ocultar IP en la UI
+              <label class="toggle"><input type="checkbox" id="f-hide-ip"><span class="toggle-track"></span></label>
+            </label>
+            <label class="span2">masterKey<input id="f-key" placeholder="fractal-dev-rp" /></label>
+          </div>
+          <div class="row end">
+            <button type="button" class="ghost" id="btn-cancel-server-2">Cancelar</button>
+            <button type="button" class="primary small" id="btn-save-server">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <footer>
+      <div class="foot-info" id="foot-info"></div>
+      <button class="kill-btn" id="btn-kill-game" hidden>⏹ Cerrar juego</button>
+    </footer>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

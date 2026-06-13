@@ -1,0 +1,37 @@
+{
+  "requiredGameVersion": "1.6.1170",
+  "pingPort": 3000,
+
+  "skse": {
+    "url": "https://skse.silverlock.org/beta/skse64_2_02_06.7z"
+  },
+
+  "clientPack": {
+    "//": "mode = 'url' | 'github' | 'local'. Por defecto 'url' apuntando a nightly.link (sin token).",
+    "mode": "url",
+
+    "url": "https://nightly.link/skyrim-multiplayer/skymp/workflows/pr-windows-flatrim/main/dist.zip",
+
+    "github": {
+      "//": "Alternativa: descarga directa via API de GitHub. Requiere un PAT con scope 'actions:read'.",
+      "repo": "skyrim-multiplayer/skymp",
+      "artifactName": "dist",
+      "token": ""
+    },
+
+    "local": {
+      "//": "Alternativa de desarrollo: usa un dist.zip que ya tengas en disco.",
+      "path": ""
+    },
+
+    "//clientDataSubpath": "Dentro del zip, la carpeta que se superpone sobre <juego>/Data",
+    "clientDataSubpath": "client/Data",
+
+    "front": {
+      "//": "Paquete pre-compilado de skymp5-front (UI de chat/login), generado con 'yarn build' desde skymp5-front. Deja 'url' vacio para omitir este paso.",
+      "url": "https://github.com/FRACTAL-GAME-STUDIOS/skymp-launcher/releases/download/front-v1/front.zip",
+      "//subpath": "Dentro del zip del front, carpeta que se superpone sobre <juego>/Data/Platform/UI. '.' = raiz del zip.",
+      "subpath": "."
+    }
+  }
+}

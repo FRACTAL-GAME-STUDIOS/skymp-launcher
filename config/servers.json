@@ -1,0 +1,22 @@
+{
+  "servers": [
+    {
+      "id": "local",
+      "name": "LOCALHOST",
+      "ip": "enc:UOl0Q32TYcVS6ERMwX86hSt2dgKEpXAFEuiE9ErwiWFDuPSjJQ==",
+      "port": "enc:vgZF1klL+BiFH2Jp8i5JCbebaxOfnh9Ar6sq5Aa7S7I=",
+      "pingPort": 3000,
+      "hideIp": false,
+      "masterKey": "local"
+    },
+    {
+      "id": "fractal",
+      "name": "FRACTAL - DEV",
+      "ip": "enc:BX7QtoUXC6KxbpxoaRqkmebMvgfx/Kxp8RhEs9PZmcVqsNvgk6k0mq8=",
+      "port": "enc:6YT8vBwCN0U+vqQhye+WnTpy84Fk3p54oe42P/4adhA=",
+      "pingPort": 3000,
+      "hideIp": true,
+      "masterKey": "fractal-dev"
+    }
+  ]
+}
