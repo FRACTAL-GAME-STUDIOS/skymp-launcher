@@ -92,7 +92,7 @@ function createWindow() {
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
-  if (!app.isPackaged) {
+  if (config && config.enabledDevTools) {
     mainWindow.webContents.openDevTools();
   }
 }
