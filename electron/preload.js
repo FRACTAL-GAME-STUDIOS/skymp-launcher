@@ -16,9 +16,13 @@ contextBridge.exposeInMainWorld('api', {
   deleteServer: (id) => ipcRenderer.invoke('delete-server', id),
   install: () => ipcRenderer.invoke('install'),
   installFront: () => ipcRenderer.invoke('install-front'),
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
+  updateContent: (targets) => ipcRenderer.invoke('update-content', targets),
   play: (opts) => ipcRenderer.invoke('play', opts),
   onInstallProgress: (cb) =>
     ipcRenderer.on('install-progress', (_e, payload) => cb(payload)),
+  onUpdateProgress: (cb) =>
+    ipcRenderer.on('update-progress', (_e, payload) => cb(payload)),
   onServersChanged: (cb) =>
     ipcRenderer.on('servers-changed', (_e, servers) => cb(servers)),
   onConfigChanged: (cb) =>

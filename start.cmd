@@ -12,5 +12,18 @@ if not exist "node_modules" (
     )
 )
 
+:: Verifica que el binario de Electron existe de verdad
+set ELECTRON_PATH=node_modules\electron\dist\electron.exe
+if not exist "%ELECTRON_PATH%" (
+    echo Electron no se instalo correctamente. Reinstalando...
+    rd /s /q node_modules\electron
+    call npm install electron --save-dev
+    if errorlevel 1 (
+        echo Error al reinstalar Electron.
+        pause
+        exit /b 1
+    )
+)
+
 call npm start
 pause

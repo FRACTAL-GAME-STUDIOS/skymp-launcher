@@ -228,6 +228,34 @@ ipcMain.handle('install', async () => {
   }
 });
 
+ipcMain.handle('check-update', async () => {
+  try {
+    if (!isInstalled()) return { ok: true, any: false };
+    const config = loadConfig();
+    const result = await installer.checkForUpdates({ dest: getInstallDir(), config });
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('update-content', async (_e, targets) => {
+  const config = loadConfig();
+  try {
+    if (!isInstalled()) throw new Error('SkyMP no está instalado.');
+    const result = await installer.updateContent({
+      dest: getInstallDir(),
+      config,
+      targets,
+      onStage: (stage, info) =>
+        mainWindow.webContents.send('update-progress', { stage, info }),
+    });
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('install-front', async () => {
   const config = loadConfig();
   try {

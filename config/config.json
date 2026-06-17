@@ -7,17 +7,10 @@
   },
 
   "clientPack": {
-    "//": "mode = 'url' | 'github' | 'local'. Por defecto 'url' apuntando a nightly.link (sin token).",
+    "//": "mode = 'url' | 'local'. Por defecto 'url' apuntando a nightly.link (sin token).",
     "mode": "url",
 
     "url": "https://nightly.link/skyrim-multiplayer/skymp/workflows/pr-windows-flatrim/main/dist.zip",
-
-    "github": {
-      "//": "Alternativa: descarga directa via API de GitHub. Requiere un PAT con scope 'actions:read'.",
-      "repo": "skyrim-multiplayer/skymp",
-      "artifactName": "dist",
-      "token": ""
-    },
 
     "local": {
       "//": "Alternativa de desarrollo: usa un dist.zip que ya tengas en disco.",

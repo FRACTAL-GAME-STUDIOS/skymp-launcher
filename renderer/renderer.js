@@ -12,6 +12,7 @@ const state = {
   servers: [],
   frontInstalled: false,
   frontConfigured: false,
+  updateInfo: null,
 };
 
 const STEAM_URL = 'https://store.steampowered.com/about/';
@@ -174,6 +175,7 @@ async function installFrontUI() {
     setFoot('Interfaz SkyMP instalada.', 'ok');
     state.frontInstalled = true;
     refreshFrontReq();
+    await checkUpdates();
   } else {
     setFoot('Error: ' + res.error, 'err');
     $('stage-label').textContent = 'Fallo al instalar la interfaz.';
@@ -182,31 +184,88 @@ async function installFrontUI() {
 }
 
 // --- Instalación ---------------------------------------------------------
-window.api.onInstallProgress(({ stage, info }) => {
-  $('progress-wrap').hidden = false;
-  const bar = $('bar');
+
+// Pinta el progreso de una fase (instalacion o actualizacion) en la barra y
+// etiqueta indicadas. Comun a install-progress y update-progress, que llevan
+// la misma forma de payload pero alimentan barras distintas.
+function renderProgressInto(barEl, labelEl, stage, info) {
   let label = stage;
   if (info.message) label = info.message;
 
   if (info.copiedBytes != null) {
     const pct = info.totalBytes ? Math.round((info.copiedBytes / info.totalBytes) * 100) : 0;
-    bar.style.width = pct + '%';
+    barEl.style.width = pct + '%';
     label = `Clonando Skyrim · ${human(info.copiedBytes)} / ${human(info.totalBytes)} (${pct}%)`;
   } else if (info.received != null) {
     const pct = info.total ? Math.round((info.received / info.total) * 100) : 0;
-    if (info.total) bar.style.width = pct + '%';
+    if (info.total) barEl.style.width = pct + '%';
     label = `Descargando · ${human(info.received)}${info.total ? ' / ' + human(info.total) : ''}`;
   } else if (typeof info.percent === 'number') {
-    bar.style.width = info.percent + '%';
+    barEl.style.width = info.percent + '%';
     label = `${info.message || 'Extrayendo'} · ${info.percent}%`;
   } else if (info.done != null) {
     const pct = info.total ? Math.round((info.done / info.total) * 100) : 0;
-    bar.style.width = pct + '%';
+    barEl.style.width = pct + '%';
     label = `${info.message || 'Copiando'} · ${info.done}/${info.total}`;
   }
-  $('stage-label').textContent = label;
+  labelEl.textContent = label;
+}
+
+window.api.onInstallProgress(({ stage, info }) => {
+  $('progress-wrap').hidden = false;
+  renderProgressInto($('bar'), $('stage-label'), stage, info);
   if (info.versionWarning) setFoot(info.versionWarning, 'err');
 });
+
+// --- Actualización de contenido (sin reinstalar) --------------------------
+window.api.onUpdateProgress(({ stage, info }) => {
+  $('update-progress-wrap').hidden = false;
+  renderProgressInto($('update-bar'), $('update-stage-label'), stage, info);
+});
+
+async function checkUpdates() {
+  if (!state.installed) return;
+  const res = await window.api.checkUpdate();
+  if (!res.ok) return;
+  state.updateInfo = res;
+  const banner = $('update-banner');
+  if (!res.any) {
+    banner.hidden = true;
+    return;
+  }
+  const parts = [];
+  if (res.pack && res.pack.hasUpdate) parts.push('cliente');
+  if (res.front && res.front.hasUpdate) parts.push('interfaz');
+  if (res.skse && res.skse.hasUpdate) parts.push('SKSE');
+  $('update-banner-text').textContent = `Actualización disponible (${parts.join(', ')}).`;
+  banner.hidden = false;
+}
+
+async function doUpdateContent() {
+  if (!state.updateInfo) return;
+  const targets = {
+    pack: !!(state.updateInfo.pack && state.updateInfo.pack.hasUpdate),
+    front: !!(state.updateInfo.front && state.updateInfo.front.hasUpdate),
+    skse: !!(state.updateInfo.skse && state.updateInfo.skse.hasUpdate),
+  };
+  $('btn-update-content').disabled = true;
+  $('update-progress-wrap').hidden = false;
+  $('update-bar').style.width = '0%';
+  setFoot('Actualizando contenido…');
+
+  const res = await window.api.updateContent(targets);
+  if (res.ok) {
+    $('update-bar').style.width = '100%';
+    $('update-stage-label').textContent = 'Actualización completada.';
+    setFoot('Contenido actualizado.', 'ok');
+    $('update-banner').hidden = true;
+    state.updateInfo = null;
+  } else {
+    setFoot('Error: ' + res.error, 'err');
+    $('update-stage-label').textContent = 'Falló la actualización.';
+  }
+  $('btn-update-content').disabled = false;
+}
 
 async function doInstall() {
   if (!state.gameFound) return;
@@ -227,6 +286,7 @@ async function doInstall() {
     state.frontConfigured = status.frontConfigured;
     refreshFrontReq();
     await loadServers();
+    await checkUpdates();
     showView('servers');
   } else {
     setFoot('Error: ' + res.error, 'err');
@@ -418,6 +478,7 @@ async function init() {
   $('game-action').onclick = () => window.api.openExternal(SKYRIM_URL);
   $('front-action').onclick = installFrontUI;
   $('btn-kill-game').onclick = killGame;
+  $('btn-update-content').onclick = doUpdateContent;
 
   $('btn-refresh').onclick = pingAll;
   $('btn-add-server').onclick = openModal;
@@ -430,6 +491,7 @@ async function init() {
 
   await loadServers();
   await detect();
+  await checkUpdates();
 
   window.api.onServersChanged((servers) => {
     state.servers = servers;
@@ -440,8 +502,13 @@ async function init() {
   window.api.onConfigChanged((cfg) => {
     state.requiredVersion = cfg.requiredGameVersion || null;
     detect();
+    checkUpdates();
     setFoot('Configuración recargada.', 'ok');
   });
+
+  // Re-comprobar de fondo por si el dev publica un pack/front nuevo sin
+  // tocar config.json (p.ej. un nuevo build de GitHub Actions).
+  setInterval(checkUpdates, 5 * 60 * 1000);
 
   showView(state.installed ? 'servers' : 'setup');
 }
