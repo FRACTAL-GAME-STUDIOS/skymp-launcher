@@ -3,13 +3,18 @@
 // Orquestador de la instalacion completa de SkyMP.
 // Fases: verify -> clone -> download-skse -> extract-skse -> overlay-skse
 //        -> download-pack -> extract-pack -> overlay-pack -> done
+//
+// Ademas de la instalacion completa (clona Skyrim entero), este modulo
+// ofrece checkForUpdates()/updateContent() para refrescar solo el client
+// pack / la interfaz / SKSE cuando cambian en el origen, sin tener que
+// reinstalar desde cero.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const steam = require('./steam');
-const { download, resolveGithubArtifact } = require('./download');
+const { download, probe } = require('./download');
 const { extract } = require('./extract');
 const { copyDirWithProgress, mergeDir, findDirContaining } = require('./fsutil');
 
@@ -28,15 +33,180 @@ function checkFrontInstalled(dest) {
   return fs.existsSync(path.join(dest, 'Data', 'Platform', 'UI', 'index.html'));
 }
 
+// --- manifest de versiones -------------------------------------------------
+// Guarda, por componente (skse/pack/front), una huella de lo que hay
+// instalado (etag/last-modified/content-length del recurso remoto, o
+// mtime+size si es un pack local). Permite saber si hay una version mas
+// nueva sin volver a descargar nada.
+
+const MANIFEST_REL = '.skymp-launcher-manifest.json';
+
+function manifestPath(dest) {
+  return path.join(dest, MANIFEST_REL);
+}
+
+function readManifest(dest) {
+  try {
+    return JSON.parse(fs.readFileSync(manifestPath(dest), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function writeManifest(dest, manifest) {
+  fs.writeFileSync(manifestPath(dest), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+}
+
+// null si no hay suficiente informacion (el servidor no envia cabeceras de
+// cache); en ese caso no podemos saber si hay actualizacion.
+function fpFromHeaders({ etag, lastModified, contentLength }) {
+  if (!etag && !lastModified && !contentLength) return null;
+  return ['h', etag || '', lastModified || '', contentLength || ''].join('|');
+}
+
+function fpFromFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  const st = fs.statSync(filePath);
+  return `f|${st.size}|${st.mtimeMs}`;
+}
+
+// Huella remota actual del client pack, sin descargarlo entero.
+async function probePackFingerprint(config) {
+  const pack = config.clientPack;
+  if (!pack) return null;
+  if (pack.mode === 'local' && pack.local && pack.local.path) {
+    return fpFromFile(pack.local.path);
+  }
+  if (pack.url) {
+    try {
+      return fpFromHeaders(await probe(pack.url));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// Huella remota actual de la interfaz (skymp5-front), o null si no esta
+// configurada.
+async function probeFrontFingerprint(config) {
+  const front = config.clientPack && config.clientPack.front;
+  if (!front || !front.url) return null;
+  try {
+    return fpFromHeaders(await probe(front.url));
+  } catch {
+    return null;
+  }
+}
+
+async function probeSkseFingerprint(config) {
+  if (!config.skse || !config.skse.url) return null;
+  try {
+    return fpFromHeaders(await probe(config.skse.url));
+  } catch {
+    return null;
+  }
+}
+
+// Compara las huellas remotas actuales con las guardadas en el manifest de
+// la instalacion. Si un componente no tiene huella conocida todavia (p.ej.
+// instalaciones hechas antes de tener este sistema), no se marca como
+// actualizable: se limita a registrar la huella actual la siguiente vez que
+// se instale/actualice ese componente.
+async function checkForUpdates({ dest, config }) {
+  const manifest = readManifest(dest);
+  const [pack, front, skse] = await Promise.all([
+    probePackFingerprint(config),
+    probeFrontFingerprint(config),
+    probeSkseFingerprint(config),
+  ]);
+
+  const componentInfo = (current, known) => ({
+    current,
+    known: known || null,
+    hasUpdate: !!current && !!known && current !== known,
+  });
+
+  const result = {
+    pack: componentInfo(pack, manifest.pack),
+    front: componentInfo(front, manifest.front),
+    skse: componentInfo(skse, manifest.skse),
+  };
+  result.any = result.pack.hasUpdate || result.front.hasUpdate || result.skse.hasUpdate;
+  return result;
+}
+
+// --- pasos compartidos entre instalacion completa y actualizacion ---------
+
+async function installSkse({ dest, config, tmpDir, onStage }) {
+  const skse7z = path.join(tmpDir, 'skse.7z');
+  onStage('download-skse', { message: 'Descargando SKSE64...' });
+  const dl = await download(config.skse.url, skse7z, (received, total) =>
+    onStage('download-skse', { received, total })
+  );
+
+  const skseOut = path.join(tmpDir, 'skse');
+  onStage('extract-skse', { message: 'Extrayendo SKSE...' });
+  await extract(skse7z, skseOut, (percent) => onStage('extract-skse', { percent }));
+
+  const skseRoot = findDirContaining(skseOut, 'skse64_loader.exe') || skseOut;
+  onStage('overlay-skse', { message: 'Instalando SKSE...' });
+  await mergeDir(skseRoot, dest, (p) => onStage('overlay-skse', p));
+
+  return fpFromHeaders({ etag: dl.etag, lastModified: dl.lastModified, contentLength: dl.total });
+}
+
+async function installPack({ dest, config, tmpDir, onStage }) {
+  const pack = config.clientPack;
+  let packZip;
+  let fingerprint = null;
+
+  if (pack.mode === 'local' && pack.local && pack.local.path) {
+    packZip = pack.local.path;
+    onStage('download-pack', { message: `Usando pack local: ${packZip}` });
+    if (!fs.existsSync(packZip)) throw new Error(`No existe el pack local: ${packZip}`);
+    fingerprint = fpFromFile(packZip);
+  } else {
+    // modo 'url' (nightly.link u hosting propio)
+    packZip = path.join(tmpDir, 'pack.zip');
+    onStage('download-pack', { message: 'Descargando client pack...' });
+    const dl = await download(pack.url, packZip, (r, t) => onStage('download-pack', { received: r, total: t }));
+    fingerprint = fpFromHeaders({ etag: dl.etag, lastModified: dl.lastModified, contentLength: dl.total });
+  }
+
+  const packOut = path.join(tmpDir, 'pack');
+  onStage('extract-pack', { message: 'Extrayendo client pack...' });
+  await extract(packZip, packOut, (percent) => onStage('extract-pack', { percent }));
+
+  const sub = (pack.clientDataSubpath || 'client/Data').split('/');
+  let clientData = path.join(packOut, ...sub);
+  if (!fs.existsSync(clientData)) {
+    // Por si el zip no anida en client/: buscar la carpeta Data.
+    const found = findDirContaining(packOut, 'skymp5-client.js');
+    if (found) clientData = found; // .../Platform/Plugins -> subimos 2 niveles
+    // Subir hasta el Data
+    while (clientData && path.basename(clientData) !== 'Data' && path.dirname(clientData) !== clientData) {
+      clientData = path.dirname(clientData);
+    }
+  }
+  if (!clientData || !fs.existsSync(clientData)) {
+    throw new Error('No se encontro client/Data dentro del pack descargado.');
+  }
+  onStage('overlay-pack', { message: 'Instalando cliente SkyMP...' });
+  await mergeDir(clientData, path.join(dest, 'Data'), (p) => onStage('overlay-pack', p));
+
+  return fingerprint;
+}
+
 // Descarga y superpone el paquete pre-compilado de skymp5-front sobre
 // <dest>/Data/Platform/UI. Si no hay URL configurada, no hace nada.
 async function installFrontPack({ dest, config, tmpDir, onStage }) {
   const front = config.clientPack && config.clientPack.front;
-  if (!front || !front.url) return { skipped: true };
+  if (!front || !front.url) return { skipped: true, fingerprint: null };
 
   const frontZip = path.join(tmpDir, 'front.zip');
   onStage('download-front', { message: 'Descargando interfaz SkyMP (skymp5-front)...' });
-  await download(front.url, frontZip, (received, total) =>
+  const dl = await download(front.url, frontZip, (received, total) =>
     onStage('download-front', { received, total })
   );
 
@@ -54,7 +224,9 @@ async function installFrontPack({ dest, config, tmpDir, onStage }) {
   }
   onStage('overlay-front', { message: 'Instalando interfaz SkyMP...' });
   await mergeDir(frontData, path.join(dest, 'Data', 'Platform', 'UI'), (p) => onStage('overlay-front', p));
-  return { skipped: false };
+
+  const fingerprint = fpFromHeaders({ etag: dl.etag, lastModified: dl.lastModified, contentLength: dl.total });
+  return { skipped: false, fingerprint };
 }
 
 // Descarga y aplica el parche de cliente FRACTAL (sobreescribe skymp5-client.js).
@@ -94,6 +266,9 @@ async function installFront(opts) {
   if (result.skipped) {
     throw new Error('La interfaz de SkyMP (skymp5-front) no esta configurada (clientPack.front.url vacio).');
   }
+  const manifest = readManifest(dest);
+  manifest.front = result.fingerprint;
+  writeManifest(dest, manifest);
   onStage('done', { message: 'Interfaz instalada.' });
   return { dest };
 }
@@ -131,67 +306,20 @@ async function install(opts) {
   fs.mkdirSync(dest, { recursive: true });
   await copyDirWithProgress(gameDir, dest, (p) => onStage('clone', p));
 
-  // 3. Descargar SKSE ---------------------------------------------------
-  const skse7z = path.join(tmpDir, 'skse.7z');
-  onStage('download-skse', { message: 'Descargando SKSE64...' });
-  await download(config.skse.url, skse7z, (received, total) =>
-    onStage('download-skse', { received, total })
-  );
+  // 3-5. Descargar, extraer y superponer SKSE ----------------------------
+  const skseFingerprint = await installSkse({ dest, config, tmpDir, onStage });
 
-  // 4. Extraer SKSE -----------------------------------------------------
-  const skseOut = path.join(tmpDir, 'skse');
-  onStage('extract-skse', { message: 'Extrayendo SKSE...' });
-  await extract(skse7z, skseOut, (percent) => onStage('extract-skse', { percent }));
-
-  // 5. Overlay SKSE -> destino (loader + dlls + Data/) ------------------
-  const skseRoot = findDirContaining(skseOut, 'skse64_loader.exe') || skseOut;
-  onStage('overlay-skse', { message: 'Instalando SKSE...' });
-  await mergeDir(skseRoot, dest, (p) => onStage('overlay-skse', p));
-
-  // 6. Obtener el client pack ------------------------------------------
-  const pack = config.clientPack;
-  let packZip;
-  if (pack.mode === 'local' && pack.local && pack.local.path) {
-    packZip = pack.local.path;
-    onStage('download-pack', { message: `Usando pack local: ${packZip}` });
-    if (!fs.existsSync(packZip)) throw new Error(`No existe el pack local: ${packZip}`);
-  } else if (pack.mode === 'github') {
-    onStage('download-pack', { message: 'Resolviendo artefacto de GitHub...' });
-    const { downloadUrl, headers } = await resolveGithubArtifact(pack.github);
-    packZip = path.join(tmpDir, 'pack.zip');
-    await download(downloadUrl, packZip, (r, t) => onStage('download-pack', { received: r, total: t }), headers);
-  } else {
-    // modo 'url' (nightly.link u hosting propio)
-    packZip = path.join(tmpDir, 'pack.zip');
-    onStage('download-pack', { message: 'Descargando client pack...' });
-    await download(pack.url, packZip, (r, t) => onStage('download-pack', { received: r, total: t }));
-  }
-
-  // 7. Extraer pack -----------------------------------------------------
-  const packOut = path.join(tmpDir, 'pack');
-  onStage('extract-pack', { message: 'Extrayendo client pack...' });
-  await extract(packZip, packOut, (percent) => onStage('extract-pack', { percent }));
-
-  // 8. Overlay pack: <pack>/client/Data -> <dest>/Data ------------------
-  const sub = (pack.clientDataSubpath || 'client/Data').split('/');
-  let clientData = path.join(packOut, ...sub);
-  if (!fs.existsSync(clientData)) {
-    // Por si el zip no anida en client/: buscar la carpeta Data.
-    const found = findDirContaining(packOut, 'skymp5-client.js');
-    if (found) clientData = found; // .../Platform/Plugins -> subimos 2 niveles
-    // Subir hasta el Data
-    while (clientData && path.basename(clientData) !== 'Data' && path.dirname(clientData) !== clientData) {
-      clientData = path.dirname(clientData);
-    }
-  }
-  if (!clientData || !fs.existsSync(clientData)) {
-    throw new Error('No se encontro client/Data dentro del pack descargado.');
-  }
-  onStage('overlay-pack', { message: 'Instalando cliente SkyMP...' });
-  await mergeDir(clientData, path.join(dest, 'Data'), (p) => onStage('overlay-pack', p));
+  // 6-8. Obtener, extraer y superponer el client pack --------------------
+  const packFingerprint = await installPack({ dest, config, tmpDir, onStage });
 
   // 9. Interfaz SkyMP (skymp5-front), opcional ---------------------------
-  await installFrontPack({ dest, config, tmpDir, onStage });
+  const frontResult = await installFrontPack({ dest, config, tmpDir, onStage });
+
+  writeManifest(dest, {
+    skse: skseFingerprint,
+    pack: packFingerprint,
+    front: frontResult.skipped ? null : frontResult.fingerprint,
+  });
 
   // 10. Parche de cliente FRACTAL RP (sobreescribe skymp5-client.js) ------
   await installClientPatch({ dest, config, tmpDir, onStage });
@@ -200,4 +328,43 @@ async function install(opts) {
   return { dest, versionWarning };
 }
 
-module.exports = { install, installFront, checkInstalled, checkFrontInstalled };
+// Actualiza solo los componentes indicados en `targets` (p.ej. { pack: true,
+// front: true, skse: false }) sobre una instalacion ya existente, sin volver
+// a clonar Skyrim. Pensado para usarse despues de checkForUpdates().
+async function updateContent(opts) {
+  const { dest, config, targets = {} } = opts;
+  const onStage = opts.onStage || (() => {});
+  const tmpDir =
+    opts.tmpDir || fs.mkdtempSync(path.join(os.tmpdir(), 'skymp-update-'));
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  if (!checkInstalled(dest)) {
+    throw new Error('SkyMP no esta instalado en esta carpeta.');
+  }
+
+  const manifest = readManifest(dest);
+
+  if (targets.skse) {
+    manifest.skse = await installSkse({ dest, config, tmpDir, onStage });
+  }
+  if (targets.pack) {
+    manifest.pack = await installPack({ dest, config, tmpDir, onStage });
+  }
+  if (targets.front) {
+    const result = await installFrontPack({ dest, config, tmpDir, onStage });
+    if (!result.skipped) manifest.front = result.fingerprint;
+  }
+
+  writeManifest(dest, manifest);
+  onStage('done', { message: 'Actualizacion completada.' });
+  return { dest };
+}
+
+module.exports = {
+  install,
+  installFront,
+  updateContent,
+  checkForUpdates,
+  checkInstalled,
+  checkFrontInstalled,
+};

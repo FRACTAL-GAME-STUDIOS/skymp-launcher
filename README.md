@@ -63,7 +63,7 @@ jugador ejecuta sin tener Node.
 
 ### `config/config.json` — de dónde sale el client pack
 
-`clientPack.mode` admite tres vías:
+`clientPack.mode` admite dos vías:
 
 - **`url`** (por defecto): descarga directa de un ZIP. Viene apuntando a
   **nightly.link**, que expone artefactos de repos públicos de GitHub Actions
@@ -72,10 +72,11 @@ jugador ejecuta sin tener Node.
   > ⚠️ Verifica esa URL la primera vez (nightly.link sirve el último build con
   > éxito de la rama `main`). Lo ideal en producción es **rehospedar tú** el pack
   > en tu VPS y poner aquí esa URL, para fijar la versión que va con tu servidor.
-- **`github`**: usa la API de GitHub para coger el último artefacto `dist`.
-  **Requiere un PAT** con scope `actions:read` en `clientPack.github.token`.
-  Los artefactos de Actions **no se pueden bajar de forma anónima**; por eso
-  existe nightly.link.
+  >
+  > No se usa el modo `github` (API de Actions) porque sus artefactos
+  > requieren un token (PAT con scope `actions:read`) para descargarse, y este
+  > launcher es público: no hay forma de repartir ese token a los jugadores
+  > sin exponerlo.
 - **`local`**: usa un `dist.zip` que ya tengas en disco
   (`clientPack.local.path`). Útil para desarrollo con el zip que ya descargaste.
 
@@ -108,7 +109,7 @@ se escribe la config de cliente con esa IP/puerto.
 config/config.json      fuente del pack + SKSE + version requerida
 config/servers.json     servidores objetivo
 src/core/steam.js       deteccion de Steam/Skyrim + version
-src/core/download.js    descargas con redirecciones + artefactos GitHub
+src/core/download.js    descargas con redirecciones + comprobacion de version
 src/core/extract.js     extraccion 7z/zip (7za empaquetado)
 src/core/fsutil.js      clonado con progreso + overlay
 src/core/settings.js    skymp5-client-settings.txt + servidores

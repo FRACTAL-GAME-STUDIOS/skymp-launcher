@@ -1,18 +1,35 @@
 {
-  "name": "skymp-launcher",
-  "version": "0.1.0",
-  "description": "Launcher de 1 clic para FRACTAL - DEV (SkyMP): detecta Skyrim en Steam, clona la instalacion, descarga SKSE + el client pack y los coloca donde toca, con seleccion de servidor.",
-  "main": "electron/main.js",
-  "scripts": {
-    "start": "electron ."
-  },
-  "author": "FRACTAL - DEV",
-  "license": "MIT",
-  "dependencies": {
-    "7zip-bin": "^5.2.0",
-    "node-7z": "^3.0.0"
-  },
-  "devDependencies": {
-    "electron": "^31.0.0"
-  }
+    "name": "skymp-launcher",
+    "version": "0.1.0",
+    "description": "Launcher de 1 clic para FRACTAL - DEV (SkyMP): detecta Skyrim en Steam, clona la instalacion, descarga SKSE + el client pack y los coloca donde toca, con seleccion de servidor.",
+    "main": "electron/main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder"
+    },
+    "author": "FRACTAL - DEV",
+    "license": "MIT",
+    "dependencies": {
+        "7zip-bin": "^5.2.0",
+        "node-7z": "^3.0.0"
+    },
+    "devDependencies": {
+        "electron": "^42.4.1",
+        "electron-builder": "^26.15.3"
+    },
+    "build": {
+        "appId": "com.example.myapp",
+        "asarUnpack": [
+            "node_modules/7zip-bin/**/*"
+        ],
+        "win": {
+            "target": "portable"
+        },
+        "linux": {
+            "target": "AppImage"
+        },
+        "mac": {
+            "target": "dmg"
+        }
+    }
 }
