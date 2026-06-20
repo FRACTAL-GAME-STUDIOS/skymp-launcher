@@ -57,6 +57,30 @@ async function installFrontPack({ dest, config, tmpDir, onStage }) {
   return { skipped: false };
 }
 
+// Descarga y aplica el parche de cliente FRACTAL (sobreescribe skymp5-client.js).
+async function installClientPatch({ dest, config, tmpDir, onStage }) {
+  const patch = config.clientPack && config.clientPack.clientPatch;
+  if (!patch || !patch.url) return { skipped: true };
+
+  const patchZip = path.join(tmpDir, 'client-patch.zip');
+  onStage('download-patch', { message: 'Descargando cliente FRACTAL RP...' });
+  await download(patch.url, patchZip, (received, total) =>
+    onStage('download-patch', { received, total })
+  );
+
+  const patchOut = path.join(tmpDir, 'client-patch');
+  onStage('extract-patch', { message: 'Extrayendo cliente FRACTAL RP...' });
+  await extract(patchZip, patchOut, (percent) => onStage('extract-patch', { percent }));
+
+  const subPath = (patch.subpath || '.').split('/');
+  let patchData = path.join(patchOut, ...subPath);
+  if (!fs.existsSync(patchData)) patchData = patchOut;
+
+  onStage('overlay-patch', { message: 'Instalando cliente FRACTAL RP...' });
+  await mergeDir(patchData, dest, (p) => onStage('overlay-patch', p));
+  return { skipped: false };
+}
+
 // Instala (o actualiza) solo la interfaz skymp5-front sobre una instalacion
 // de SkyMP ya existente.
 async function installFront(opts) {
@@ -168,6 +192,9 @@ async function install(opts) {
 
   // 9. Interfaz SkyMP (skymp5-front), opcional ---------------------------
   await installFrontPack({ dest, config, tmpDir, onStage });
+
+  // 10. Parche de cliente FRACTAL RP (sobreescribe skymp5-client.js) ------
+  await installClientPatch({ dest, config, tmpDir, onStage });
 
   onStage('done', { message: 'Instalacion completada.', versionWarning });
   return { dest, versionWarning };
